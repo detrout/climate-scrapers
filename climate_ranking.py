@@ -56,12 +56,16 @@ def get_form_parameters(parameters):
         sorted(parameters['periods[]'].keys()),
     )
 
-def get_data(parameters):
+def requests_generator(parameters, year):
     baseurl = 'https://www.ncdc.noaa.gov/temp-and-precip/climatological-rankings/download.csv'
     parameter_columns = ['parameter', 'state', 'div', 'month', 'periods[]', 'year']
+    for val in get_form_parameters(parameters):
+        args = zip(parameter_columns, itertools.chain(val, [year]))
+        yield grequests.get(baseurl, params=args)
+
+def get_data(parameters):
     csvheader = "Title,Period,Value,Twentieth Century Mean, Departure, Low Rank, High Rank, Record Low, Record High, Lowest Since, Highest Since, Percentile, Ties"
 
-    # grab more interesting years first
     for year in parameters['year']:
         print('starting {}'.format(year)) 
         tzero = time.monotonic()
@@ -69,24 +73,16 @@ def get_data(parameters):
         with open('climatological_rankings_{}.csv'.format(year), 'wt') as outstream:
             outstream.write(csvheader)
             
-            reqs = []
-            for val in get_form_parameters(parameters):
-                args = zip(parameter_columns, itertools.chain(val, [year]))
-                reqs.append(grequests.get(baseurl, params=args))
+            results = grequests.imap(requests_generator(parameters, year), size=20, exception_handler=forgiving_handler)
+            for result in results:
+                if result is not None:
+                    line = result.content.decode('utf-8').split('\n')
+                    outstream.write(line[0])
+                    outstream.write('",')
+                    outstream.write(line[2])
+                    outstream.write('\n')
 
-                if len(reqs) > 20000:
-
-                    results = grequests.imap(reqs, size=20, exception_handler=forgiving_handler)
-                    for result in results:
-                        if result is not None:
-                            line = result.content.decode('utf-8').split('\n')
-                            outstream.write(line[0])
-                            outstream.write('",')
-                            outstream.write(line[2])
-                            outstream.write('\n')
-
-                    reqs = []
-                    print('.', sep='')
+            print('.', sep='')
 
         tnext = time.monotonic()
         print('Processed year {} in {:,} seconds'.format(year, tnext-tzero))
