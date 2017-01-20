@@ -15,6 +15,7 @@ The title column is a human readable version of the request url form parameters
 
 from __future__ import print_function
 
+import argparse
 import requests
 from lxml.html import fromstring
 import itertools
@@ -63,10 +64,11 @@ def requests_generator(parameters, year):
         args = zip(parameter_columns, itertools.chain(val, [year]))
         yield grequests.get(baseurl, params=args)
 
-def get_data(parameters):
+def get_data(parameters, years):
     csvheader = "Title,Period,Value,Twentieth Century Mean, Departure, Low Rank, High Rank, Record Low, Record High, Lowest Since, Highest Since, Percentile, Ties"
 
-    for year in parameters['year']:
+    print('Processing years: {}'.format(','.join(years)))
+    for year in years:
         print('starting {}'.format(year)) 
         tzero = time.monotonic()
 
@@ -88,9 +90,19 @@ def get_data(parameters):
         print('Processed year {} in {:,} seconds'.format(year, tnext-tzero))
         tzero = tnext
 
-def main():
+def main(cmdline=None):
+    parser = argparse.ArgumentParser()
+    parser.add_argument('years', nargs='*')
+
+    args = parser.parse_args(cmdline)
     parameters = get_parameters_from_landing()
-    get_data(parameters)
+
+    if args.years is None or len(args.years) == 0:
+        years = parameters['year']
+    else:
+        years = args.years
+
+    get_data(parameters, years)
 
 if __name__ == '__main__':
     main()
